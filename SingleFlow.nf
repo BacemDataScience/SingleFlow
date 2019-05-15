@@ -1,9 +1,9 @@
 #!/usr/bin/env nextflow
 
-params.inputFiles = "Donor 2/Sample 14,Donor 2/Sample 15,Donor 2/Sample 16,Donor 2/Sample 17,Donor 2/Sample 18"
+params.input = false
 params.colors = "b,g,r,c,m,y,k,w"
-params.colorsCustom = "black,yellow,orange,b,c,r,g,w,m"
-params.cellCycleCorrect = false
+params.custom_colors = "black,yellow,orange,b,c,r,g,w,m"
+params.ccc = false
 params.customClusters = false
 params.deg = false
 params.outdir = 'results'
@@ -12,8 +12,34 @@ params.rnaVelocity = false
 params.phenographClusters = false
 params.geneTrends = false
 params.geneExpression = false
+params.glmpca = false
+params.imputation = 'MAGIC'
 
-log.info "scRNA pipeline running"
+if (params.help) {
+    log.info ''
+    log.info '--------------------------------------------------'
+    log.info 'SingleFLow - scRNA-seq Analysis Pipeline'
+    log.info '--------------------------------------------------'
+    log.info ''
+    log.info 'Usage: '
+    log.info 'nextflow run SingleFlow.nf --input <folder(s)>'
+    log.info ''
+    log.info 'Mandatory arguments:'
+    log.info '    --input               FOLDER(S)               Folder or comma-separated list of folders containing the scRNA-seq data for analysis'
+    log.info 'Optional arguments:'
+    log.info '    --outdir              FOLDER                  Folder for the results of the anlalysis to be put in, default: \'results\'.'
+    log.info '    --colors              STRING                  Comma-separated colors for use in plotting the results of the analysis.'
+    log.info '    --custom_colors       STRING                  Comma-separated colors for use when defining custom cell clusters.'
+    log.info '    --ccc                 BOOLEAN                 Specify whether to perform cell cycle correction of the data set or not.'
+    log.info '    --custom_clusters     BOOLEAN                 Specify whether to define custom cell clusters or not'
+    log.info '    --deg                 BOOLEAN                 Specify whether to perform differentially expressed gene analysis or not.'
+    log.info '    --gene_file           FILE                    '
+    log.info '    --'
+    log.info ''
+    exit 1
+}
+
+log.info "SingleFlow running ..."
 
 process loadData {
     output:
@@ -432,7 +458,7 @@ process custom_clusters {
 
     cell_clusters = []
 
-    colors = "${params.colorsCustom}".split(',')
+    colors = "${params.custom_colors}".split(',')
     qapp = QtWidgets.QApplication(sys.argv)
     app = TsneWindow(tsne, cell_clusters, colors, out_dir)
     app.show()
