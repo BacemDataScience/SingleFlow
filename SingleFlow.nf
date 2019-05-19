@@ -4,16 +4,20 @@ params.input = false
 params.colors = "b,g,r,c,m,y,k,w"
 params.custom_colors = "black,yellow,orange,b,c,r,g,w,m"
 params.ccc = false
-params.customClusters = false
+params.custom_clusters = false
 params.deg = false
 params.outdir = 'results'
-params.genesFile = false
-params.rnaVelocity = false
-params.phenographClusters = false
-params.geneTrends = false
-params.geneExpression = false
+params.rna_velocity = false
+params.phenograph_clusters = false
+params.gene_trends = false
+params.gene_trends_late = false
+params.gene_expression = false
 params.glmpca = false
 params.imputation = 'MAGIC'
+params.exclude = null
+params.degWin = false
+params.factorAnalysis = false
+params.help = false
 
 if (params.help) {
     log.info ''
@@ -33,9 +37,17 @@ if (params.help) {
     log.info '    --ccc                 BOOLEAN                 Specify whether to perform cell cycle correction of the data set or not.'
     log.info '    --custom_clusters     BOOLEAN                 Specify whether to define custom cell clusters or not'
     log.info '    --deg                 BOOLEAN                 Specify whether to perform differentially expressed gene analysis or not.'
-    log.info '    --gene_file           FILE                    '
-    log.info '    --'
-    log.info ''
+    log.info '    --rna_velocity        FILE                    Specify whether to embed RNA velocity or not, if yes input a .loom file similar to the output of velocyto.'
+    log.info '    --phenograph_clusters BOOLEAN                 Specify whether to calculate and visualize Phenograph clusters or not.'
+    log.info '    --gene_trends         BOOLEAN                 Specify whether to calculate the gene trends.'
+    log.info '    --gene_trends_late    FLOAT                   If set, the gene trends will be calculated and clustered from the given pseudotime.'
+    log.info '    --gene_expression     FILE                    Specify a file with genes whose expression levels should be visualized.'
+    log.info '    --glmpca              BOOLEAN                 Use the glm-PCA method or the conventional normalization and subsequent PCA. '
+    log.info '    --imputation          STRING                  Specify which imputation method to use, default: \'MAGIC\'.'
+    log.info '    --exclude             FILE                    Specify a file containing cells that should be excluded form the analysis.'
+    log.info '    --degWin              FILE                    Show the result of DEG analysis in the specified file.'
+    log.info '    --factorAnalysis      FILE                    File containing the factors used as input to the factor analysis.'
+    log.info '    --help                BOOLEAN                 Show helper menu.'
     exit 1
 }
 
@@ -62,7 +74,7 @@ process loadData {
 
     from load_data import load_data
 
-    input_files = "${params.inputFiles}".split(',')
+    input_files = "${params.input}".split(',')
     input_files = ['/'.join(('${baseDir}'.split('/')[:-1])) + '/' + file for file in input_files]
 
     df, id_to_name = load_data(input_files)
@@ -158,7 +170,7 @@ process cellCycleCorrect {
     file 'corrected_df.pkl' into cccData
 
     when:
-    params.cellCycleCorrect
+    params.ccc
 
     exec:
     println 'Cell cycle correction'
@@ -282,7 +294,7 @@ process plotSubsets {
 
     out_dir = os.path.join('${baseDir}', '${params.outdir}')
 
-    samples = "${params.inputFiles}".split(',')
+    samples = "${params.input}".split(',')
     for sample in samples:
         cluster = tsne.index.values[np.flatnonzero(np.core.defchararray.find(tsne.index.values.astype(str),sample)!=-1)]
         highlight_cells_on_tsne(tsne, cluster)
@@ -435,7 +447,7 @@ process custom_clusters {
     cache false
 
     when:
-    params.customClusters
+    params.custom_clusters
 
     script:
     """
@@ -470,7 +482,7 @@ process custom_clusters {
         cell_clusters_dict[colors[i]] = cell_clusters[i].values
         exclude = np.append(exclude, np.array(cell_clusters[i].values))
 
-    np.save('${baseDir}/exclude_custom.npy', exclude)
+    #np.save('${baseDir}/exclude_custom.npy', exclude)
 
     np.save('cell_clusters.npy', cell_clusters_dict)
 
@@ -490,7 +502,7 @@ process phenograph {
     cache 'deep'
 
     when:
-    params.phenographClusters
+    params.phenograph_clusters
 
     script:
     """
@@ -559,7 +571,7 @@ process pseudotimeBoxplot {
     with open('${prRes}', 'rb') as input_file:
         pr_res = pickle.load(input_file)
     clusters = pd.read_pickle('${phenograph}')
-    samples = "${params.inputFiles}".split(',')
+    samples = "${params.input}".split(',')
     colors = "${params.colors}".split(',')
 
 
@@ -688,7 +700,7 @@ process geneExpression {
     cache false
 
     when:
-    params.geneExpression
+    params.gene_expression
 
     script:
     """
@@ -704,7 +716,7 @@ process geneExpression {
     from plot import plot_gene_expression
 
     out_dir = os.path.join('${baseDir}', '${params.outdir}')
-    file_name = os.path.join('${baseDir}', '${params.geneExpression}')
+    file_name = os.path.join('${baseDir}', '${params.gene_expression}')
 
     imp_df = pd.read_pickle('${impDf}')
     imp_df.columns = np.load('${genes}')
@@ -792,7 +804,7 @@ process rnaVelocity {
     echo true
 
     when:
-    params.rnaVelocity
+    params.rna_velocity
 
     script:
     """
@@ -812,7 +824,7 @@ process rnaVelocity {
         return np.fromstring(b.tostring(),dtype=(str,end-start))
 
     out_dir = os.path.join('${baseDir}', '${params.outdir}')
-    vlm = vcy.VelocytoLoom(os.path.join('$baseDir', '${params.rnaVelocity}'))
+    vlm = vcy.VelocytoLoom(os.path.join('$baseDir', '${params.rna_velocity}'))
     tsne = pd.read_pickle('${tsneDf}')
     include = np.array([x[-9:-3].lower() + x[-2:] + ':' + x[:16] for x in tsne.index])
     has = slicer_vectorized(vlm.ca['CellID'].astype('U'),0,25)
@@ -830,7 +842,7 @@ process rnaVelocity {
     colors = "${params.colors}".split(',')
     colors = np.array([[ 0.95,  0.6,  0.1], [0.85,  0.3,  0.1], [ 0.8,  0.02,  0.1], [0.81,  0.43,  0.72352941], [0.2,  0.53,  0.71]])
     colors_dict = dict()
-    samples = "${params.inputFiles}".split(',')
+    samples = "${params.input}".split(',')
     for i, sample in enumerate(samples):
         sample = sample.split('/')[-1].split(' ')[0].lower() + str(sample.split('/')[-1].split(' ')[1])
         colors_dict[sample] = colors[i]
@@ -911,7 +923,7 @@ process computeGeneTrends {
     cache 'deep'
 
     when:
-    params.geneTrends
+    params.gene_trends
 
     script:
     """
@@ -946,7 +958,7 @@ process chooseTrajectoryTrendsLate {
     cache 'deep'
 
     when:
-    params.geneTrendsLate
+    params.gene_trends_late
 
     script:
     """
@@ -976,7 +988,7 @@ process chooseTrajectoryTrendsLate {
     with open('${gtRes}', 'rb') as input_file:
         gene_trends = pickle.load(input_file)
 
-    start_pseudotime = float('${params.geneTrendsLate}')
+    start_pseudotime = float('${params.gene_trends_late}')
 
     trajectories = []
 
